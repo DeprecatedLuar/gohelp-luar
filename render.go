@@ -112,29 +112,36 @@ func printSection(title string, entries []Entry, width int) {
 			firstPrefix = contIndent
 		}
 
-		printWrappedDesc(firstPrefix, e.desc, contIndent, entryBlue, alignAt, width)
-
-		if e.example != "" {
-			fmt.Printf("%s%s# %s%s\n", contIndent, dim, e.example, reset)
-		}
+		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryBlue, alignAt, width)
 	}
 	fmt.Println()
 }
 
-func printWrappedDesc(prefix, desc, contIndent, color string, alignAt, width int) {
+func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, width int) {
 	wrapWidth := max(width-alignAt, 20)
 	if desc == "" {
-		fmt.Println(prefix)
+		if example != "" {
+			fmt.Printf("%s%s# %s%s\n", prefix, dim, example, reset)
+		} else {
+			fmt.Println(prefix)
+		}
 		return
 	}
 	wrapped := wordwrap.String(desc, wrapWidth)
 	lines := strings.Split(strings.TrimRight(wrapped, "\n"), "\n")
 
 	for i, line := range lines {
+		last := i == len(lines)-1
+		var indent string
 		if i == 0 {
-			fmt.Printf("%s%s%s%s\n", prefix, color, line, reset)
+			indent = prefix
 		} else {
-			fmt.Printf("%s%s%s%s\n", contIndent, color, line, reset)
+			indent = contIndent
+		}
+		if last && example != "" {
+			fmt.Printf("%s%s%s%s  %s# %s%s\n", indent, color, line, reset, dim, example, reset)
+		} else {
+			fmt.Printf("%s%s%s%s\n", indent, color, line, reset)
 		}
 	}
 }
