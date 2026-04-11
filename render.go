@@ -30,8 +30,11 @@ func termWidth() int {
 	return w
 }
 
-func header(title string) string {
+func separator(title string) string {
 	width := termWidth() - 4
+	if title == "" {
+		return dim + strings.Repeat("─", width) + reset
+	}
 	prefix := "──["
 	suffix := "]"
 	displayWidth := 3 + len(title) + 1 // "──[" + title + "]"
@@ -57,7 +60,7 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 	width := termWidth()
 
 	fmt.Println()
-	fmt.Println(header(p.binary + " - " + p.description))
+	fmt.Println(separator(p.binary + " - " + p.description))
 	fmt.Println()
 
 	for _, el := range p.elements {
@@ -117,31 +120,45 @@ func printSection(title string, entries []Entry, width int) {
 	fmt.Println()
 }
 
+const egPrefix = "  (e.g. "
+
 func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, width int) {
 	wrapWidth := max(width-alignAt, 20)
-	if desc == "" {
-		if example != "" {
-			fmt.Printf("%s%s# %s%s\n", prefix, dim, example, reset)
-		} else {
-			fmt.Println(prefix)
-		}
+
+	full := desc
+	if example != "" {
+		full += egPrefix + example + ")"
+	}
+	if full == "" {
+		fmt.Println(prefix)
 		return
 	}
-	wrapped := wordwrap.String(desc, wrapWidth)
+
+	w := wordwrap.NewWriter(wrapWidth)
+	w.Breakpoints = []rune{}
+	fmt.Fprint(w, full)
+	w.Close()
+	wrapped := w.String()
 	lines := strings.Split(strings.TrimRight(wrapped, "\n"), "\n")
 
+	inExample := false
 	for i, line := range lines {
-		last := i == len(lines)-1
 		var indent string
 		if i == 0 {
 			indent = prefix
 		} else {
 			indent = contIndent
 		}
-		if last && example != "" {
-			fmt.Printf("%s%s%s%s  %s# %s%s\n", indent, color, line, reset, dim, example, reset)
+
+		if !inExample {
+			if idx := strings.Index(line, egPrefix); idx != -1 {
+				inExample = true
+				fmt.Printf("%s%s%s%s%s%s%s\n", indent, color, line[:idx], reset, dim, line[idx:], reset)
+			} else {
+				fmt.Printf("%s%s%s%s\n", indent, color, line, reset)
+			}
 		} else {
-			fmt.Printf("%s%s%s%s\n", indent, color, line, reset)
+			fmt.Printf("%s%s%s%s\n", indent, dim, line, reset)
 		}
 	}
 }
@@ -157,8 +174,9 @@ func printTopics(binary string, pages []*Page, width int) {
 	alignAt += 2
 
 	fmt.Println()
-	fmt.Println(header("topics - " + binary + " help <topic>"))
+	fmt.Println(separator(""))
 	fmt.Println()
+	printTitle("Topics")
 
 	for i, p := range pages {
 		last := i == len(pages)-1
@@ -178,5 +196,7 @@ func printTopics(binary string, pages []*Page, width int) {
 		fmt.Println(truncate.StringWithTail(line, uint(width), ">"))
 	}
 
+	fmt.Println()
+	fmt.Printf("Run '%s help <topic>' for details.\n", binary)
 	fmt.Println()
 }
