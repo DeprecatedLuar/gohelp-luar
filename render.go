@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/muesli/reflow/ansi"
-	"github.com/muesli/reflow/truncate"
-	"github.com/muesli/reflow/wordwrap"
 	"golang.org/x/term"
 )
 
@@ -20,18 +18,25 @@ const (
 	reset     = "\033[0m"
 )
 
+const (
+	defaultTermWidth = 80 // fallback when terminal size cannot be detected
+	separatorMargin  = 4  // chars consumed by "──[" + "]" decorators
+	alignPad         = 2  // extra spaces added after the longest command to form the description column
+	minWrapWidth     = 20 // minimum description wrap width regardless of terminal size
+)
+
 var blues = [2]string{blue, blueAlt}
 
 func termWidth() int {
 	w, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || w <= 0 {
-		return 80
+		return defaultTermWidth
 	}
 	return w
 }
 
 func separator(title string) string {
-	width := termWidth() - 4
+	width := termWidth() - separatorMargin
 	if title == "" {
 		return dim + strings.Repeat("─", width) + reset
 	}
@@ -76,19 +81,19 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 	}
 
 	if len(pages) > 0 {
-		printTopics(rootBinary, pages, width)
+		printTopics(rootBinary, pages)
 	}
 }
 
 func printSection(title string, entries []Entry, width int) {
 	alignAt := 0
 	for _, e := range entries {
-		l := ansi.PrintableRuneWidth("├ " + e.cmd)
+		l := ansiWidth("├ " + e.cmd)
 		if l > alignAt {
 			alignAt = l
 		}
 	}
-	alignAt += 2
+	alignAt += alignPad
 
 	printTitle(title)
 
@@ -106,7 +111,7 @@ func printSection(title string, entries []Entry, width int) {
 
 		entryBlue := blues[i%2]
 
-		visibleCmdLen := ansi.PrintableRuneWidth("├ " + e.cmd) // ├ and ╰ are same width
+		visibleCmdLen := ansiWidth("├ " + e.cmd) // ├ and ╰ are same width
 		var firstPrefix string
 		if visibleCmdLen < alignAt {
 			firstPrefix = branch + e.cmd + strings.Repeat(" ", alignAt-visibleCmdLen)
@@ -123,7 +128,7 @@ func printSection(title string, entries []Entry, width int) {
 const egPrefix = "  (e.g. "
 
 func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, width int) {
-	wrapWidth := max(width-alignAt, 20)
+	wrapWidth := max(width-alignAt, minWrapWidth)
 
 	full := desc
 	if example != "" {
@@ -134,11 +139,7 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 		return
 	}
 
-	w := wordwrap.NewWriter(wrapWidth)
-	w.Breakpoints = []rune{}
-	fmt.Fprint(w, full)
-	w.Close()
-	wrapped := w.String()
+	wrapped := ansiWordWrap(full, wrapWidth)
 	lines := strings.Split(strings.TrimRight(wrapped, "\n"), "\n")
 
 	inExample := false
@@ -163,15 +164,15 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 	}
 }
 
-func printTopics(binary string, pages []*Page, width int) {
+func printTopics(binary string, pages []*Page) {
 	alignAt := 0
 	for _, p := range pages {
-		l := ansi.PrintableRuneWidth("├ " + p.binary)
+		l := ansiWidth("├ " + p.binary)
 		if l > alignAt {
 			alignAt = l
 		}
 	}
-	alignAt += 2
+	alignAt += alignPad
 
 	fmt.Println()
 	fmt.Println(separator(""))
@@ -188,15 +189,106 @@ func printTopics(binary string, pages []*Page, width int) {
 		}
 
 		mainPart := branch + p.binary
-		visibleLen := ansi.PrintableRuneWidth("├ " + p.binary)
+		visibleLen := ansiWidth("├ " + p.binary)
 		if visibleLen < alignAt {
 			mainPart += strings.Repeat(" ", alignAt-visibleLen)
 		}
 		line := mainPart + blue + p.description + reset
-		fmt.Println(truncate.StringWithTail(line, uint(width), ">"))
+		fmt.Println(line)
 	}
 
 	fmt.Println()
 	fmt.Printf("Run '%s help <topic>' for details.\n", binary)
 	fmt.Println()
+}
+
+// ansiWidth returns the visible (printable) width of s, ignoring ANSI escape sequences.
+// Rune width is assumed to be 1 for all printable characters (ASCII + Latin, no CJK).
+func ansiWidth(s string) int {
+	w := 0
+	i := 0
+	for i < len(s) {
+		if s[i] == '\033' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++ // past 'm'
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		w++
+		i += size
+	}
+	return w
+}
+
+// ansiWordWrap wraps s at space boundaries so each line's visible width stays ≤ limit.
+// ANSI escape sequences are preserved but do not count toward width.
+func ansiWordWrap(s string, limit int) string {
+	if limit <= 0 {
+		return s
+	}
+	var out strings.Builder
+	lineW := 0
+	pendingSpaces := 0
+
+	i := 0
+	n := len(s)
+	for i < n {
+		if s[i] == ' ' {
+			pendingSpaces++
+			i++
+			continue
+		}
+
+		// collect word: non-space run (may include embedded ANSI codes)
+		wordStart := i
+		wordVis := 0
+		j := i
+		for j < n && s[j] != ' ' {
+			if s[j] == '\033' && j+1 < n && s[j+1] == '[' {
+				j += 2
+				for j < n && s[j] != 'm' {
+					j++
+				}
+				if j < n {
+					j++
+				}
+				continue
+			}
+			_, size := utf8.DecodeRuneInString(s[j:])
+			wordVis++
+			j += size
+		}
+		word := s[wordStart:j]
+		i = j
+
+		if lineW == 0 {
+			pendingSpaces = 0
+			out.WriteString(word)
+			lineW += wordVis
+		} else if lineW+pendingSpaces+wordVis > limit {
+			out.WriteByte('\n')
+			lineW = 0
+			pendingSpaces = 0
+			out.WriteString(word)
+			lineW += wordVis
+		} else {
+			for k := 0; k < pendingSpaces; k++ {
+				out.WriteByte(' ')
+			}
+			lineW += pendingSpaces
+			pendingSpaces = 0
+			out.WriteString(word)
+			lineW += wordVis
+		}
+	}
+	// trailing spaces (rare but preserve them)
+	for k := 0; k < pendingSpaces; k++ {
+		out.WriteByte(' ')
+	}
+	return out.String()
 }
