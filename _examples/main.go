@@ -19,6 +19,7 @@ func main() {
 			gohelp.Item("--env ENV", "Target environment: dev, staging, or prod (required)"),
 			gohelp.Item("--dry-run", "Print the actions that would be taken without executing them"),
 			gohelp.Item("--timeout DURATION", "Maximum time to wait for the deployment to complete before aborting (e.g. 2m, 90s)"),
+			gohelp.Item("--strategy STRATEGY", "Rollout strategy to use for this deployment", "deploy up --env prod --strategy=canary-incremental-with-healthcheck"),
 			gohelp.Item("--yes", "Skip confirmation prompts"),
 		).
 		Text("Credentials are read from the environment. Set DEPLOY_TOKEN or run 'deploy auth login' to authenticate.")

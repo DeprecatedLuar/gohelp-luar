@@ -203,8 +203,53 @@ func ansiWidth(s string) int {
 	return w
 }
 
+// takeVisible returns the first n visible characters of s as chunk, the remainder as rest,
+// and the actual visible width of chunk. ANSI escapes pass through without counting.
+func takeVisible(s string, n int) (chunk, rest string, vis int) {
+	i, w := 0, 0
+	for i < len(s) && w < n {
+		if s[i] == '\033' && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			if j < len(s) {
+				j++
+			}
+			i = j
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		w++
+		i += size
+	}
+	return s[:i], s[i:], w
+}
+
+// writeWord writes word to out, hard-breaking at limit if the word alone exceeds it.
+func writeWord(out *strings.Builder, word string, wordVis int, lineW *int, limit int) {
+	if wordVis <= limit {
+		out.WriteString(word)
+		*lineW += wordVis
+		return
+	}
+	// word is longer than limit: hard-break it
+	rem := word
+	for rem != "" {
+		chunk, rest, cv := takeVisible(rem, limit)
+		out.WriteString(chunk)
+		*lineW = cv
+		rem = rest
+		if rem != "" {
+			out.WriteByte('\n')
+			*lineW = 0
+		}
+	}
+}
+
 // ansiWordWrap wraps s at space boundaries so each line's visible width stays ≤ limit.
 // ANSI escape sequences are preserved but do not count toward width.
+// Words longer than limit are hard-broken to prevent terminal-controlled overflow.
 func ansiWordWrap(s string, limit int) string {
 	if limit <= 0 {
 		return s
@@ -246,22 +291,19 @@ func ansiWordWrap(s string, limit int) string {
 
 		if lineW == 0 {
 			pendingSpaces = 0
-			out.WriteString(word)
-			lineW += wordVis
+			writeWord(&out, word, wordVis, &lineW, limit)
 		} else if lineW+pendingSpaces+wordVis > limit {
 			out.WriteByte('\n')
 			lineW = 0
 			pendingSpaces = 0
-			out.WriteString(word)
-			lineW += wordVis
+			writeWord(&out, word, wordVis, &lineW, limit)
 		} else {
 			for k := 0; k < pendingSpaces; k++ {
 				out.WriteByte(' ')
 			}
 			lineW += pendingSpaces
 			pendingSpaces = 0
-			out.WriteString(word)
-			lineW += wordVis
+			writeWord(&out, word, wordVis, &lineW, limit)
 		}
 	}
 	// trailing spaces (rare but preserve them)
