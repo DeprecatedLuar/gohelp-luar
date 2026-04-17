@@ -139,7 +139,7 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 		}
 
 		if !inExample {
-			if idx := strings.Index(line, egPrefix); idx != -1 {
+			if idx := strings.Index(line, "(e.g."); idx != -1 {
 				inExample = true
 				fmt.Printf("%s%s%s%s%s%s%s\n", indent, color, line[:idx], reset, dim, line[idx:], reset)
 			} else {
