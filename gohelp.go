@@ -5,6 +5,7 @@ type elementKind int
 const (
 	kindText    elementKind = iota
 	kindSection
+	kindUsage
 )
 
 type Entry struct {
@@ -13,14 +14,12 @@ type Entry struct {
 	example string
 }
 
-// Cmd creates a section entry with a command and description.
-func Cmd(cmd, desc string) Entry {
-	return Entry{cmd: cmd, desc: desc}
-}
-
-// Example adds a dim example line rendered below the description.
-func (e Entry) Example(s string) Entry {
-	e.example = s
+// Item creates a section entry. The optional third argument is a dim example line.
+func Item(cmd, desc string, example ...string) Entry {
+	e := Entry{cmd: cmd, desc: desc}
+	if len(example) > 0 {
+		e.example = example[0]
+	}
 	return e
 }
 
@@ -43,9 +42,10 @@ func NewPage(binary, description string) *Page {
 	return &Page{binary: binary, description: description}
 }
 
-// Usage appends a "Usage:" section with a single line of content.
+// Usage appends an indented usage line (no section bar).
 func (p *Page) Usage(usage string) *Page {
-	return p.Section("Usage", Cmd(usage, ""))
+	p.elements = append(p.elements, element{kind: kindUsage, pairs: []string{usage}})
+	return p
 }
 
 // Text appends a plain paragraph.

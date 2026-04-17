@@ -21,20 +21,20 @@ import (
 root := gohelp.NewPage("mytool", "does something useful").
     Usage("mytool <command> [flags]").
     Section("Commands",
-        gohelp.Cmd("start", "Start the service").Example("mytool start --env prod"),
-        gohelp.Cmd("stop", "Gracefully stop the service"),
+        gohelp.Item("start", "Start the service", "mytool start --env prod"),
+        gohelp.Item("stop", "Gracefully stop the service"),
     ).
     Section("Flags",
-        gohelp.Cmd("--verbose", "Enable debug output"),
-        gohelp.Cmd("--help", "Show this help message"),
+        gohelp.Item("--verbose", "Enable debug output"),
+        gohelp.Item("--help", "Show this help message"),
     ).
     Text("All commands support --help for detailed usage.")
 
 config := gohelp.NewPage("config", "manage configuration").
     Usage("mytool config <command>").
     Section("Commands",
-        gohelp.Cmd("show", "Print current config"),
-        gohelp.Cmd("edit", "Open config in $EDITOR").Example("mytool config edit"),
+        gohelp.Item("show", "Print current config"),
+        gohelp.Item("edit", "Open config in $EDITOR", "mytool config edit"),
     )
 
 gohelp.Run(os.Args[1:], root, config)
@@ -52,15 +52,14 @@ gohelp.NewPage(binary, description string) *Page
 
 | Method | Description |
 |--------|-------------|
-| `.Usage(s string)` | Adds a `Usage:` section with a single line |
-| `.Section(title string, entries ...Entry)` | Adds a labeled block of command/description pairs |
+| `.Usage(s string)` | Adds an indented usage line (no section bar) |
+| `.Section(title string, entries ...Entry)` | Adds a labeled section with a `──[Title]──` bar |
 | `.Text(s string)` | Adds a plain paragraph |
 
-### Entries
+### Items
 
 ```go
-gohelp.Cmd(cmd, desc string) Entry       // create an entry
-entry.Example(s string) Entry            // add a dim example line below the description
+gohelp.Item(cmd, desc string, example ...string) Entry  // optional third arg is a dim example line
 ```
 
 ### Rendering
@@ -81,34 +80,36 @@ gohelp.Print(p *Page, pages ...*Page)                   // print a specific page
 ```
 ──[deploy - zero-downtime deployment tool]──────────────────────────────────
 
-Usage:
-╰ deploy <command> [flags]
+  deploy <command> [flags]
 
-Commands:
-├ up            Deploy the application to the target environment  (e.g. deploy
-│               up --env staging)
-├ down          Tear down the deployment and release all resources
-├ rollback [n]  Roll back to a previous release; defaults to the last stable
-│               release if n is omitted  (e.g. deploy rollback 2 --env prod)
-╰ status        Show current deployment status, uptime, and active instances
+──[Commands]────────────────────────────────────────────────────────────────
 
-Flags:
-├ --env ENV           Target environment: dev, staging, or prod (required)
-├ --dry-run           Print the actions that would be taken without executing
-│                     them
-├ --timeout DURATION  Maximum time to wait for the deployment to complete before
-│                     aborting (e.g. 2m, 90s)
-╰ --yes               Skip confirmation prompts
+  up            Deploy the application to the target environment  (e.g. deploy
+                up --env staging)
+  down          Tear down the deployment and release all resources
+  rollback [n]  Roll back to a previous release; defaults to the last stable
+                release if n is omitted  (e.g. deploy rollback 2 --env prod)
+  status        Show current deployment status, uptime, and active instances
+
+──[Flags]───────────────────────────────────────────────────────────────────
+
+  --env ENV           Target environment: dev, staging, or prod (required)
+  --dry-run           Print the actions that would be taken without executing
+                      them
+  --timeout DURATION  Maximum time to wait for the deployment to complete
+                      before aborting (e.g. 2m, 90s)
+  --yes               Skip confirmation prompts
 
 
-Credentials are read from the environment. Set DEPLOY_TOKEN or run 'deploy auth login' to authenticate.
+  Credentials are read from the environment. Set DEPLOY_TOKEN or run
+  'deploy auth login' to authenticate.
 
 
 ────────────────────────────────────────────────────────────────────────────
 
 Topics:
-├ releases  list and inspect past deployments
-╰ auth      manage authentication credentials
+  releases  list and inspect past deployments
+  auth      manage authentication credentials
 
 Run 'deploy help <topic>' for details.
 ```

@@ -10,12 +10,10 @@ import (
 )
 
 const (
-	bold      = "\033[1m"
-	dim       = "\033[2m"
-	purple    = "\033[35m"
-	blue      = "\033[34m"
-	blueAlt   = "\033[38;5;75m"
-	reset     = "\033[0m"
+	dim     = "\033[2m"
+	blue    = "\033[34m"
+	blueAlt = "\033[38;5;75m"
+	reset   = "\033[0m"
 )
 
 const (
@@ -45,13 +43,9 @@ func separator(title string) string {
 	displayWidth := 3 + len(title) + 1 // "──[" + title + "]"
 
 	if displayWidth >= width {
-		return dim + prefix + reset + blue + title + reset + dim + suffix + reset
+		return prefix + title + suffix + reset
 	}
-	return dim + prefix + reset + blue + title + reset + dim + suffix + strings.Repeat("─", width-displayWidth) + reset
-}
-
-func printTitle(title string) {
-	fmt.Printf("%s%s%s:%s\n", bold, purple, title, reset)
+	return prefix + title + suffix + strings.Repeat("─", width-displayWidth) + reset
 }
 
 // Print renders a page to stdout. If pages are provided, a topics block is appended.
@@ -70,9 +64,13 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 
 	for _, el := range p.elements {
 		switch el.kind {
+		case kindUsage:
+			fmt.Println("  " + el.pairs[0])
+			fmt.Println()
+
 		case kindText:
 			fmt.Println()
-			fmt.Println(el.pairs[0])
+			fmt.Println("  " + el.pairs[0])
 			fmt.Println()
 
 		case kindSection:
@@ -88,38 +86,27 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 func printSection(title string, entries []Entry, width int) {
 	alignAt := 0
 	for _, e := range entries {
-		l := ansiWidth("├ " + e.cmd)
+		l := ansiWidth("  " + e.cmd)
 		if l > alignAt {
 			alignAt = l
 		}
 	}
 	alignAt += alignPad
 
-	printTitle(title)
+	fmt.Println(separator(title))
+	fmt.Println()
 
+	contIndent := strings.Repeat(" ", alignAt)
 	for i, e := range entries {
-		last := i == len(entries)-1
-
-		var branch, contIndent string
-		if last {
-			branch = dim + "╰ " + reset
-			contIndent = strings.Repeat(" ", alignAt)
-		} else {
-			branch = dim + "├ " + reset
-			contIndent = dim + "│" + reset + strings.Repeat(" ", alignAt-1)
-		}
-
 		entryBlue := blues[i%2]
-
-		visibleCmdLen := ansiWidth("├ " + e.cmd) // ├ and ╰ are same width
+		visibleCmdLen := ansiWidth("  " + e.cmd)
 		var firstPrefix string
 		if visibleCmdLen < alignAt {
-			firstPrefix = branch + e.cmd + strings.Repeat(" ", alignAt-visibleCmdLen)
+			firstPrefix = "  " + e.cmd + strings.Repeat(" ", alignAt-visibleCmdLen)
 		} else {
-			fmt.Println(branch + e.cmd)
+			fmt.Println("  " + e.cmd)
 			firstPrefix = contIndent
 		}
-
 		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryBlue, alignAt, width)
 	}
 	fmt.Println()
@@ -167,34 +154,25 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 func printTopics(binary string, pages []*Page) {
 	alignAt := 0
 	for _, p := range pages {
-		l := ansiWidth("├ " + p.binary)
+		l := ansiWidth("  " + p.binary)
 		if l > alignAt {
 			alignAt = l
 		}
 	}
 	alignAt += alignPad
 
-	fmt.Println()
 	fmt.Println(separator(""))
 	fmt.Println()
-	printTitle("Topics")
+	fmt.Println("Topics:")
+	fmt.Println()
 
-	for i, p := range pages {
-		last := i == len(pages)-1
-		var branch string
-		if last {
-			branch = dim + "╰ " + reset
-		} else {
-			branch = dim + "├ " + reset
-		}
-
-		mainPart := branch + p.binary
-		visibleLen := ansiWidth("├ " + p.binary)
+	for _, p := range pages {
+		mainPart := "  " + p.binary
+		visibleLen := ansiWidth("  " + p.binary)
 		if visibleLen < alignAt {
 			mainPart += strings.Repeat(" ", alignAt-visibleLen)
 		}
-		line := mainPart + blue + p.description + reset
-		fmt.Println(line)
+		fmt.Println(mainPart + blue + p.description + reset)
 	}
 
 	fmt.Println()
