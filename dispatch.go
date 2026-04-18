@@ -16,12 +16,14 @@ import (
 // Note: passing os.Args instead of os.Args[1:] will route on the binary path
 // as a topic name. This is a call-site concern, not defended against here.
 func Run(args []string, root *Page, pages ...*Page) {
-	if len(args) == 0 || (len(args) == 1 && args[0] == "help") {
+	isHelp := func(s string) bool { return s == "help" || s == "-h" || s == "--help" }
+
+	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
 		Print(root, pages...)
 		return
 	}
 
-	if args[0] != "help" {
+	if !isHelp(args[0]) {
 		Print(root, pages...)
 		return
 	}
