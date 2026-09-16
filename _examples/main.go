@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/DeprecatedLuar/gohelp-luar"
@@ -40,5 +41,8 @@ func main() {
 			gohelp.Item("status", "Show the currently authenticated account and token expiry"),
 		)
 
-	gohelp.Run(os.Args[1:], root, releases, auth)
+	if err := gohelp.Run(os.Args[1:], root, releases, auth); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

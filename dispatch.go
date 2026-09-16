@@ -2,30 +2,32 @@ package gohelp
 
 import (
 	"fmt"
-	"os"
+	"sort"
+	"strings"
 )
 
 // Run routes help output based on args (pass os.Args[1:] at the call site).
 //
 // Routing:
-//   - no args or "help"        → print root page
-//   - "help <topic>"           → print named sub-page
-//   - "help --all"             → print all pages sequentially
-//   - "help <unknown>"         → fuzzy-suggest, list topics, exit 1
+//   - no args or "help"        → print root page, return nil
+//   - "help <topic>"           → print named sub-page, return nil
+//   - "help --all"             → print all pages sequentially, return nil
+//   - "help <unknown>"         → return an error naming the topic, a
+//     fuzzy suggestion when one is found, and every known topic (sorted)
 //
 // Note: passing os.Args instead of os.Args[1:] will route on the binary path
 // as a topic name. This is a call-site concern, not defended against here.
-func Run(args []string, root *Page, pages ...*Page) {
+func Run(args []string, root *Page, pages ...*Page) error {
 	isHelp := func(s string) bool { return s == "help" || s == "-h" || s == "--help" }
 
 	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
 		Print(root, pages...)
-		return
+		return nil
 	}
 
 	if !isHelp(args[0]) {
 		Print(root, pages...)
-		return
+		return nil
 	}
 
 	topic := args[1]
@@ -35,7 +37,7 @@ func Run(args []string, root *Page, pages ...*Page) {
 		for _, p := range pages {
 			printPage(p, root.binary, pages...)
 		}
-		return
+		return nil
 	}
 
 	pageMap := make(map[string]*Page, len(pages))
@@ -45,19 +47,19 @@ func Run(args []string, root *Page, pages ...*Page) {
 
 	if p, ok := pageMap[topic]; ok {
 		printPage(p, root.binary, pages...)
-		return
+		return nil
 	}
 
-	if suggest := fuzzyMatch(topic, pageMap); suggest != "" {
-		fmt.Fprintf(os.Stderr, "unknown topic %q — did you mean: %s?\n\n", topic, suggest)
-	} else {
-		fmt.Fprintf(os.Stderr, "unknown topic %q\n\n", topic)
-	}
-	fmt.Fprintln(os.Stderr, "Available topics:")
+	topics := make([]string, 0, len(pageMap))
 	for name := range pageMap {
-		fmt.Fprintf(os.Stderr, "  %s\n", name)
+		topics = append(topics, name)
 	}
-	os.Exit(1)
+	sort.Strings(topics)
+
+	if suggest := fuzzyMatch(topic, pageMap); suggest != "" {
+		return fmt.Errorf("unknown topic %q — did you mean: %s? (topics: %s)", topic, suggest, strings.Join(topics, ", "))
+	}
+	return fmt.Errorf("unknown topic %q (topics: %s)", topic, strings.Join(topics, ", "))
 }
 
 func fuzzyMatch(input string, pages map[string]*Page) string {

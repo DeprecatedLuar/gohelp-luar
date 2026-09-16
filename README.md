@@ -14,6 +14,7 @@ go get github.com/DeprecatedLuar/gohelp-luar
 
 ```go
 import (
+    "fmt"
     "os"
     gohelp "github.com/DeprecatedLuar/gohelp-luar"
 )
@@ -37,7 +38,10 @@ config := gohelp.NewPage("config", "manage configuration").
         gohelp.Item("edit", "Open config in $EDITOR", "mytool config edit"),
     )
 
-gohelp.Run(os.Args[1:], root, config)
+if err := gohelp.Run(os.Args[1:], root, config); err != nil {
+    fmt.Fprintln(os.Stderr, err)
+    os.Exit(1)
+}
 ```
 
 ## API
@@ -65,15 +69,17 @@ gohelp.Item(cmd, desc string, example ...string) Entry  // optional third arg is
 ### Rendering
 
 ```go
-gohelp.Run(args []string, root *Page, pages ...*Page)   // route and print (pass os.Args[1:])
-gohelp.Print(p *Page, pages ...*Page)                   // print a specific page directly
+gohelp.Run(args []string, root *Page, pages ...*Page) error  // route and print (pass os.Args[1:])
+gohelp.Print(p *Page, pages ...*Page)                         // print a specific page directly
 ```
 
 `Run` routing:
-- no args / `help` → root page
-- `help <topic>` → named sub-page
-- `help --all` → all pages
-- `help <typo>` → fuzzy suggestion, exit 1
+- no args / `help` → root page, `nil`
+- `help <topic>` → named sub-page, `nil`
+- `help --all` → all pages, `nil`
+- `help <typo>` → non-nil error naming the topic, a fuzzy suggestion when
+  found, and every known topic — the caller decides how to print it and
+  exit
 
 ## Output
 
