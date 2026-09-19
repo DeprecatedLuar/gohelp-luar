@@ -21,6 +21,8 @@ const (
 	separatorMargin  = 4  // chars consumed by "──[" + "]" decorators
 	alignPad         = 2  // extra spaces added after the longest command to form the description column
 	minWrapWidth     = 20 // minimum description wrap width regardless of terminal size
+	minDescWidth     = 23 // minimum columns guaranteed to the description before the command column gives way
+	ellipsis         = "…"
 )
 
 var blues = [2]string{blue, blueAlt}
@@ -31,6 +33,13 @@ func termWidth() int {
 		return defaultTermWidth
 	}
 	return w
+}
+
+// maxAlignAt caps the description column so it can never eat more than
+// width-minDescWidth columns, guaranteeing the description always keeps at
+// least minDescWidth columns to wrap in.
+func maxAlignAt(width int) int {
+	return max(width-minDescWidth, minWrapWidth)
 }
 
 func separator(title string) string {
@@ -52,15 +61,20 @@ func separator(title string) string {
 // The topics footer uses p.binary as the root binary name. When printing a sub-page
 // directly (outside of Run), call printPage with the root binary explicitly.
 func Print(p *Page, pages ...*Page) {
-	printPage(p, p.binary, pages...)
+	printPage(p, p.binary, false, pages...)
 }
 
-func printPage(p *Page, rootBinary string, pages ...*Page) {
+func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 	width := termWidth()
 
 	fmt.Println()
-	fmt.Println(separator(p.binary + " - " + p.description))
+	fmt.Println(separator(p.binary))
 	fmt.Println()
+
+	if p.description != "" {
+		fmt.Println("  " + p.description)
+		fmt.Println()
+	}
 
 	for _, el := range p.elements {
 		switch el.kind {
@@ -74,7 +88,7 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 			fmt.Println()
 
 		case kindSection:
-			printSection(el.title, el.entries, width)
+			printSection(el.title, el.entries, width, noTruncate)
 		}
 	}
 
@@ -83,7 +97,7 @@ func printPage(p *Page, rootBinary string, pages ...*Page) {
 	}
 }
 
-func printSection(title string, entries []Entry, width int) {
+func printSection(title string, entries []Entry, width int, noTruncate bool) {
 	alignAt := 0
 	for _, e := range entries {
 		l := ansiWidth("  " + e.cmd)
@@ -92,6 +106,7 @@ func printSection(title string, entries []Entry, width int) {
 		}
 	}
 	alignAt += alignPad
+	alignAt = min(alignAt, maxAlignAt(width))
 
 	fmt.Println(separator(title))
 	fmt.Println()
@@ -99,15 +114,31 @@ func printSection(title string, entries []Entry, width int) {
 	contIndent := strings.Repeat(" ", alignAt)
 	for i, e := range entries {
 		entryBlue := blues[i%2]
-		visibleCmdLen := ansiWidth("  " + e.cmd)
+		cmdLine := "  " + e.cmd
+		visibleCmdLen := ansiWidth(cmdLine)
+
 		var firstPrefix string
-		if visibleCmdLen < alignAt {
-			firstPrefix = "  " + e.cmd + strings.Repeat(" ", alignAt-visibleCmdLen)
-		} else {
-			fmt.Println("  " + e.cmd)
+		overflowed := false
+		switch {
+		case visibleCmdLen < alignAt:
+			firstPrefix = cmdLine + strings.Repeat(" ", alignAt-visibleCmdLen)
+		case noTruncate:
+			fmt.Println(cmdLine)
 			firstPrefix = contIndent
+			overflowed = true
+		default:
+			keep := max(alignAt-alignPad-1, 0)
+			truncated, _, _ := takeVisible(cmdLine, keep)
+			firstPrefix = truncated + ellipsis + strings.Repeat(" ", alignPad)
 		}
+
 		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryBlue, alignAt, width)
+
+		// an overflowed entry spans multiple lines; a blank line keeps it
+		// from running into the next entry
+		if overflowed && i != len(entries)-1 {
+			fmt.Println()
+		}
 	}
 	fmt.Println()
 }

@@ -17,25 +17,38 @@ import (
 //
 // Note: passing os.Args instead of os.Args[1:] will route on the binary path
 // as a topic name. This is a call-site concern, not defended against here.
+const noTruncateFlag = "--no-truncate"
+
 func Run(args []string, root *Page, pages ...*Page) error {
 	isHelp := func(s string) bool { return s == "help" || s == "-h" || s == "--help" }
 
+	noTruncate := false
+	filtered := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == noTruncateFlag {
+			noTruncate = true
+			continue
+		}
+		filtered = append(filtered, a)
+	}
+	args = filtered
+
 	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
-		Print(root, pages...)
+		printPage(root, root.binary, noTruncate, pages...)
 		return nil
 	}
 
 	if !isHelp(args[0]) {
-		Print(root, pages...)
+		printPage(root, root.binary, noTruncate, pages...)
 		return nil
 	}
 
 	topic := args[1]
 
 	if topic == "--all" {
-		Print(root, pages...)
+		printPage(root, root.binary, noTruncate, pages...)
 		for _, p := range pages {
-			printPage(p, root.binary, pages...)
+			printPage(p, root.binary, noTruncate, pages...)
 		}
 		return nil
 	}
@@ -46,7 +59,7 @@ func Run(args []string, root *Page, pages ...*Page) error {
 	}
 
 	if p, ok := pageMap[topic]; ok {
-		printPage(p, root.binary, pages...)
+		printPage(p, root.binary, noTruncate, pages...)
 		return nil
 	}
 
