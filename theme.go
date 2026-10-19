@@ -58,7 +58,7 @@ var Colors = Theme{
 func Hex(s string) string {
 	seq, err := parseHex(s)
 	if err != nil {
-		panic("gohelp: " + err.Error())
+		panic(errPrefix + err.Error())
 	}
 	return seq
 }

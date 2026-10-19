@@ -12,7 +12,7 @@ go get github.com/DeprecatedLuar/gohelp-luar
 
 ## Usage
 
-Pages can also be built in Go:
+Pages can be built directly in Go, without a help file:
 
 ```go
 import (
@@ -99,7 +99,7 @@ $ mytool <command> [flags]
 - show | Print current config
 ```
 
-Indentation carries no meaning, blank lines only end a `>` paragraph, and a section may hold zero items. An `-` item must
+Indentation carries no meaning, blank lines only end a `>` paragraph, and a section may hold zero items. A `-` item must
 sit under a `##` section, and a `>` or `$` line closes the open section. Topic names must be unique.
 
 `@` lines may appear anywhere. Keys: `header`, `command`, `desc`, `descalt`, `text`, `example`,
@@ -146,7 +146,8 @@ gohelp.RunSpec(args []string, spec string) error              // Parse, apply th
 ```
 
 `Parse` is all-or-nothing: on error it returns `nil` and no pages. `RunSpec` sets `Colors` only after
-a successful parse; fields without an `@` assignment keep their current value.
+a successful parse; fields without an `@` assignment keep their current value. Because `Colors` is global,
+a second `RunSpec` call in the same process starts from the first file's theme.
 
 `Run` routing:
 - no args / `help` → root page, `nil`

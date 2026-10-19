@@ -177,10 +177,10 @@ func TestParseThemeErrors(t *testing.T) {
 	cases := []struct{ name, in, wantLine, wantText string }{
 		{"theme no =", "# x\n@ desc\n", "line 2:", ""},
 		{"unknown theme key", "# x\n@ commands=red\n", "line 2:", "valid: header, command"},
-		{"duplicate key", "# x\n@ desc=red\n@ desc=blue\n", "line 3:", ""},
+		{"duplicate key", "# x\n@ desc=red\n@ desc=blue\n", "line 3:", "line 2"},
 		{"duplicate key same line", "# x\n@ desc=red desc=blue\n", "line 2:", ""},
 		{"bad hex", "# x\n@ desc=#0000000\n", "line 2:", ""},
-		{"unknown palette", "# x\n@ desc=orange\n", "line 2:", ""},
+		{"unknown palette", "# x\n@ desc=orange\n", "line 2:", "palette: dim, black"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -189,10 +189,26 @@ func TestParseThemeErrors(t *testing.T) {
 				t.Fatalf("got (%v, %v), want nil spec and error", s, err)
 			}
 			msg := err.Error()
-			if !strings.HasPrefix(msg, "gohelp: ") || strings.HasPrefix(msg, "gohelp: line 2: gohelp:") ||
+			if !strings.HasPrefix(msg, "gohelp: ") || strings.Count(msg, "gohelp:") != 1 ||
 				!strings.Contains(msg, c.wantLine) || !strings.Contains(msg, c.wantText) {
 				t.Errorf("error %q does not match %q / %q", msg, c.wantLine, c.wantText)
 			}
 		})
+	}
+}
+
+func TestThemeKeysMatchTheme(t *testing.T) {
+	keys := strings.Split(validThemeKeys, ", ")
+	if n := reflect.TypeOf(Theme{}).NumField(); len(keys) != n {
+		t.Fatalf("validThemeKeys lists %d keys, Theme has %d fields", len(keys), n)
+	}
+	var th Theme
+	seen := map[*string]bool{}
+	for _, k := range keys {
+		dst := themeField(&th, k)
+		if dst == nil || seen[dst] {
+			t.Errorf("key %q does not resolve to a distinct Theme field", k)
+		}
+		seen[dst] = true
 	}
 }

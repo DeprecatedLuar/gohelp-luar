@@ -23,9 +23,26 @@ const (
 	assignSep  = "="
 
 	validThemeKeys = "header, command, desc, descalt, text, example, syntax"
+	paletteNames   = "dim, black, red, green, yellow, blue, magenta, cyan, white"
+	hexForm        = "#rrggbb"
 
 	errPrefix = "gohelp: "
 	errNoPage = errPrefix + "no page: a help file needs at least one '# name' line"
+
+	msgPageName     = "page needs a name"
+	msgSectionTitle = "section needs a title"
+	msgItemOutside  = "item outside a section: add a '## Title' line above it"
+	msgItemFields   = "item needs 'command | description'"
+	msgItemEmpty    = "item needs a non-empty command and description"
+	msgUsageEmpty   = "usage needs text"
+
+	fmtMarkerUnknown  = "unknown marker %q"
+	fmtNoPageYet      = "%q before the first '# name' line"
+	fmtDuplicatePage  = "duplicate page %q"
+	fmtAssignNoValue  = "theme assignment %q needs 'key" + assignSep + "value'"
+	fmtThemeKey       = "unknown theme key %q (valid: " + validThemeKeys + ")"
+	fmtThemeKeyRepeat = "theme key %q already assigned on line %d"
+	fmtColorUnknown   = "unknown color %q (palette: " + paletteNames + "; or " + hexForm + ")"
 )
 
 // Spec is a parsed help file.
@@ -44,16 +61,18 @@ type parser struct {
 	open    bool
 	prose   []string
 	theme   Theme
-	keys    map[string]bool
+	keys    map[string]int // theme key -> line of its assignment
+	lineNo  int
 }
 
 // Parse builds pages from help-file text using only the public builder.
 func Parse(spec string) (*Spec, error) {
-	p := &parser{names: map[string]bool{}, keys: map[string]bool{}, theme: Colors}
+	p := &parser{names: map[string]bool{}, keys: map[string]int{}, theme: Colors}
 	lines := strings.Split(strings.TrimPrefix(spec, bom), "\n")
 	for i, raw := range lines {
+		p.lineNo = i + 1
 		if err := p.line(strings.TrimSpace(raw)); err != nil {
-			return nil, fmt.Errorf("%sline %d: %w", errPrefix, i+1, err)
+			return nil, fmt.Errorf("%sline %d: %w", errPrefix, p.lineNo, err)
 		}
 	}
 	if len(p.pages) == 0 {
@@ -95,7 +114,7 @@ func (p *parser) line(line string) error {
 	case markerTheme:
 		return p.assign(rest)
 	}
-	return fmt.Errorf("unknown marker %q", marker)
+	return fmt.Errorf(fmtMarkerUnknown, marker)
 }
 
 func (p *parser) current() *Page {
@@ -104,7 +123,7 @@ func (p *parser) current() *Page {
 
 func (p *parser) requirePage(marker string) error {
 	if len(p.pages) == 0 {
-		return fmt.Errorf("%q before the first '# name' line", marker)
+		return fmt.Errorf(fmtNoPageYet, marker)
 	}
 	return nil
 }
@@ -129,11 +148,11 @@ func (p *parser) page(rest string) error {
 	name, desc, _ := strings.Cut(rest, fieldSep)
 	name, desc = strings.TrimSpace(name), strings.TrimSpace(desc)
 	if name == "" {
-		return fmt.Errorf("page needs a name")
+		return errors.New(msgPageName)
 	}
 	if len(p.pages) > 0 {
 		if p.names[name] {
-			return fmt.Errorf("duplicate page %q", name)
+			return fmt.Errorf(fmtDuplicatePage, name)
 		}
 		p.names[name] = true
 	}
@@ -147,7 +166,7 @@ func (p *parser) section(rest string) error {
 		return err
 	}
 	if rest == "" {
-		return fmt.Errorf("section needs a title")
+		return errors.New(msgSectionTitle)
 	}
 	p.flushSection()
 	p.title, p.open = rest, true
@@ -159,17 +178,17 @@ func (p *parser) item(rest string) error {
 		return err
 	}
 	if !p.open {
-		return fmt.Errorf("item outside a section: add a '## Title' line above it")
+		return errors.New(msgItemOutside)
 	}
 	fields := strings.SplitN(rest, fieldSep, itemFields)
 	if len(fields) < 2 {
-		return fmt.Errorf("item needs 'command | description'")
+		return errors.New(msgItemFields)
 	}
 	for i := range fields {
 		fields[i] = strings.TrimSpace(fields[i])
 	}
 	if fields[0] == "" || fields[1] == "" {
-		return fmt.Errorf("item needs a non-empty command and description")
+		return errors.New(msgItemEmpty)
 	}
 	p.entries = append(p.entries, Item(fields[0], fields[1], fields[2:]...))
 	return nil
@@ -191,7 +210,7 @@ func (p *parser) usage(rest string) error {
 		return err
 	}
 	if rest == "" {
-		return fmt.Errorf("usage needs text")
+		return errors.New(msgUsageEmpty)
 	}
 	p.flushSection()
 	p.current().Usage(rest)
@@ -202,20 +221,20 @@ func (p *parser) assign(rest string) error {
 	for _, field := range strings.Fields(rest) {
 		key, value, ok := strings.Cut(field, assignSep)
 		if !ok {
-			return fmt.Errorf("theme assignment %q needs 'key%svalue'", field, assignSep)
+			return fmt.Errorf(fmtAssignNoValue, field)
 		}
 		dst := themeField(&p.theme, key)
 		if dst == nil {
-			return fmt.Errorf("unknown theme key %q (valid: %s)", key, validThemeKeys)
+			return fmt.Errorf(fmtThemeKey, key)
 		}
-		if p.keys[key] {
-			return fmt.Errorf("theme key %q assigned more than once", key)
+		if first, seen := p.keys[key]; seen {
+			return fmt.Errorf(fmtThemeKeyRepeat, key, first)
 		}
 		color, err := themeColor(value)
 		if err != nil {
 			return err
 		}
-		p.keys[key] = true
+		p.keys[key] = p.lineNo
 		*dst = color
 	}
 	return nil
@@ -273,7 +292,11 @@ func themeColor(value string) (string, error) {
 	if c, ok := paletteColor(value); ok {
 		return c, nil
 	}
-	return parseHex(value)
+	c, err := parseHex(value)
+	if err != nil && !strings.HasPrefix(value, hexPrefix) {
+		return "", fmt.Errorf(fmtColorUnknown, value)
+	}
+	return c, err
 }
 
 // RunSpec parses a help file and routes args through Run.
