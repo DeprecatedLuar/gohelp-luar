@@ -56,15 +56,24 @@ var Colors = Theme{
 // It panics on malformed input: callers pass a literal at startup, so a bad
 // value is a programming error, not something to paper over at render time.
 func Hex(s string) string {
+	seq, err := parseHex(s)
+	if err != nil {
+		panic("gohelp: " + err.Error())
+	}
+	return seq
+}
+
+// parseHex is the error-returning form of Hex.
+func parseHex(s string) (string, error) {
 	h := strings.TrimPrefix(s, hexPrefix)
 	if len(h) != hexDigits {
-		panic(fmt.Sprintf("gohelp: invalid hex color %q: want %s followed by %d hex digits", s, hexPrefix, hexDigits))
+		return "", fmt.Errorf("invalid hex color %q: want %s followed by %d hex digits", s, hexPrefix, hexDigits)
 	}
 	v, err := strconv.ParseUint(h, 16, 32)
 	if err != nil {
-		panic(fmt.Sprintf("gohelp: invalid hex color %q: %v", s, err))
+		return "", fmt.Errorf("invalid hex color %q: %v", s, err)
 	}
-	return fmt.Sprintf(truecolor, v>>16&0xff, v>>8&0xff, v&0xff)
+	return fmt.Sprintf(truecolor, v>>16&0xff, v>>8&0xff, v&0xff), nil
 }
 
 // descColor returns the description color for entry index i, alternating with

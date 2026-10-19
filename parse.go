@@ -14,11 +14,15 @@ const (
 	markerItem    = "-"
 	markerProse   = ">"
 	markerUsage   = "$"
+	markerTheme   = "@"
 
 	fieldSep   = "|"
 	itemFields = 3
 	proseJoin  = " "
 	blanks     = " \t"
+	assignSep  = "="
+
+	validThemeKeys = "header, command, desc, descalt, text, example, syntax"
 
 	errPrefix = "gohelp: "
 	errNoPage = errPrefix + "no page: a help file needs at least one '# name' line"
@@ -39,11 +43,13 @@ type parser struct {
 	entries []Entry
 	open    bool
 	prose   []string
+	theme   Theme
+	keys    map[string]bool
 }
 
 // Parse builds pages from help-file text using only the public builder.
 func Parse(spec string) (*Spec, error) {
-	p := &parser{names: map[string]bool{}}
+	p := &parser{names: map[string]bool{}, keys: map[string]bool{}, theme: Colors}
 	lines := strings.Split(strings.TrimPrefix(spec, bom), "\n")
 	for i, raw := range lines {
 		if err := p.line(strings.TrimSpace(raw)); err != nil {
@@ -55,7 +61,7 @@ func Parse(spec string) (*Spec, error) {
 	}
 	p.flushProse()
 	p.flushSection()
-	return &Spec{Root: p.pages[0], Pages: p.pages[1:], Theme: Colors}, nil
+	return &Spec{Root: p.pages[0], Pages: p.pages[1:], Theme: p.theme}, nil
 }
 
 func splitMarker(line string) (marker, rest string) {
@@ -86,6 +92,8 @@ func (p *parser) line(line string) error {
 		return p.proseLine(rest)
 	case markerUsage:
 		return p.usage(rest)
+	case markerTheme:
+		return p.assign(rest)
 	}
 	return fmt.Errorf("unknown marker %q", marker)
 }
@@ -188,4 +196,82 @@ func (p *parser) usage(rest string) error {
 	p.flushSection()
 	p.current().Usage(rest)
 	return nil
+}
+
+func (p *parser) assign(rest string) error {
+	for _, field := range strings.Fields(rest) {
+		key, value, ok := strings.Cut(field, assignSep)
+		if !ok {
+			return fmt.Errorf("theme assignment %q needs 'key%svalue'", field, assignSep)
+		}
+		dst := themeField(&p.theme, key)
+		if dst == nil {
+			return fmt.Errorf("unknown theme key %q (valid: %s)", key, validThemeKeys)
+		}
+		if p.keys[key] {
+			return fmt.Errorf("theme key %q assigned more than once", key)
+		}
+		color, err := themeColor(value)
+		if err != nil {
+			return err
+		}
+		p.keys[key] = true
+		*dst = color
+	}
+	return nil
+}
+
+func themeField(th *Theme, key string) *string {
+	switch key {
+	case "header":
+		return &th.Header
+	case "command":
+		return &th.Command
+	case "desc":
+		return &th.Desc
+	case "descalt":
+		return &th.DescAlt
+	case "text":
+		return &th.Text
+	case "example":
+		return &th.Example
+	case "syntax":
+		return &th.Syntax
+	}
+	return nil
+}
+
+func paletteColor(name string) (string, bool) {
+	switch strings.ToLower(name) {
+	case "dim":
+		return Dim, true
+	case "black":
+		return Black, true
+	case "red":
+		return Red, true
+	case "green":
+		return Green, true
+	case "yellow":
+		return Yellow, true
+	case "blue":
+		return Blue, true
+	case "magenta":
+		return Magenta, true
+	case "cyan":
+		return Cyan, true
+	case "white":
+		return White, true
+	}
+	return "", false
+}
+
+// themeColor resolves a value: empty, palette name, then hex.
+func themeColor(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if c, ok := paletteColor(value); ok {
+		return c, nil
+	}
+	return parseHex(value)
 }

@@ -139,3 +139,60 @@ func TestParseErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestParseTheme(t *testing.T) {
+	saved := Colors
+	defer func() { Colors = saved }()
+
+	with := func(mut func(*Theme)) Theme {
+		th := Colors
+		mut(&th)
+		return th
+	}
+	cases := []struct {
+		name, in string
+		want     Theme
+	}{
+		{"default", "# x\n", Colors},
+		{"hex", "# x\n@ desc=#5fafff\n", with(func(th *Theme) { th.Desc = Hex("#5fafff") })},
+		{"empty", "# x\n@ descalt=\n", with(func(th *Theme) { th.DescAlt = "" })},
+		{"palette", "# x\n@ example=dim\n", with(func(th *Theme) { th.Example = Dim })},
+		{"palette case", "# x\n@ example=DIM\n", with(func(th *Theme) { th.Example = Dim })},
+		{"before page", "@ header=cyan\n# x\n", with(func(th *Theme) { th.Header = Cyan })},
+		{"one line", "# x\n@ header=red command=green\n", with(func(th *Theme) { th.Header, th.Command = Red, Green })},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := mustParse(t, c.in).Theme; got != c.want {
+				t.Errorf("theme = %+v, want %+v", got, c.want)
+			}
+		})
+	}
+	if Colors != saved {
+		t.Errorf("Parse mutated Colors")
+	}
+}
+
+func TestParseThemeErrors(t *testing.T) {
+	cases := []struct{ name, in, wantLine, wantText string }{
+		{"theme no =", "# x\n@ desc\n", "line 2:", ""},
+		{"unknown theme key", "# x\n@ commands=red\n", "line 2:", "valid: header, command"},
+		{"duplicate key", "# x\n@ desc=red\n@ desc=blue\n", "line 3:", ""},
+		{"duplicate key same line", "# x\n@ desc=red desc=blue\n", "line 2:", ""},
+		{"bad hex", "# x\n@ desc=#0000000\n", "line 2:", ""},
+		{"unknown palette", "# x\n@ desc=orange\n", "line 2:", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s, err := Parse(c.in)
+			if s != nil || err == nil {
+				t.Fatalf("got (%v, %v), want nil spec and error", s, err)
+			}
+			msg := err.Error()
+			if !strings.HasPrefix(msg, "gohelp: ") || strings.HasPrefix(msg, "gohelp: line 2: gohelp:") ||
+				!strings.Contains(msg, c.wantLine) || !strings.Contains(msg, c.wantText) {
+				t.Errorf("error %q does not match %q / %q", msg, c.wantLine, c.wantText)
+			}
+		})
+	}
+}
