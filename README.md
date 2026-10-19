@@ -81,6 +81,27 @@ gohelp.Print(p *Page, pages ...*Page)                         // print a specifi
   found, and every known topic — the caller decides how to print it and
   exit
 
+## Theming
+
+Colors are set once, globally, before printing:
+
+```go
+gohelp.Colors.Header  = gohelp.Cyan          // ──[Title]──── bars and the plain divider
+gohelp.Colors.Command = ""                   // command column, topic names
+gohelp.Colors.Desc    = gohelp.Hex("#5fafff") // descriptions
+gohelp.Colors.DescAlt = ""                   // alternating shade; empty falls back to Desc
+gohelp.Colors.Text    = ""                   // page description, paragraphs, usage line
+gohelp.Colors.Example = gohelp.Dim           // (e.g. ...) spans
+gohelp.Colors.Syntax  = gohelp.Dim           // <arg>, [opt], --flag tokens
+```
+
+An empty field emits no escape sequence: the terminal's own foreground is used for base colors,
+and an empty `Syntax` disables highlighting entirely.
+
+Built-in palette: `Dim`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`.
+`gohelp.Hex("#rrggbb")` builds a 24-bit color from a hex string (panics on malformed input — it's
+meant to be called with a literal at startup).
+
 ## Output
 
 ```

@@ -8,6 +8,12 @@ import (
 )
 
 func main() {
+	// Uncomment to try a custom theme:
+	// gohelp.Colors.Header = gohelp.Cyan
+	// gohelp.Colors.Desc = gohelp.Hex("#5fafff")
+	// gohelp.Colors.DescAlt = "" // turn off alternation
+	// gohelp.Colors.Syntax = ""  // turn off <arg>/[opt]/--flag highlighting
+
 	root := gohelp.NewPage("deploy", "zero-downtime deployment tool").
 		Usage("deploy <command> [flags]").
 		Section("Commands",

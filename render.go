@@ -10,13 +10,6 @@ import (
 )
 
 const (
-	dim     = "\033[2m"
-	blue    = "\033[34m"
-	blueAlt = "\033[38;5;75m"
-	reset   = "\033[0m"
-)
-
-const (
 	defaultTermWidth = 80 // fallback when terminal size cannot be detected
 	separatorMargin  = 4  // chars consumed by "──[" + "]" decorators
 	alignPad         = 2  // extra spaces added after the longest command to form the description column
@@ -24,8 +17,6 @@ const (
 	minDescWidth     = 23 // minimum columns guaranteed to the description before the command column gives way
 	ellipsis         = "…"
 )
-
-var blues = [2]string{blue, blueAlt}
 
 func termWidth() int {
 	w, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -45,16 +36,16 @@ func maxAlignAt(width int) int {
 func separator(title string) string {
 	width := termWidth() - separatorMargin
 	if title == "" {
-		return dim + strings.Repeat("─", width) + reset
+		return paint(Colors.Header, strings.Repeat("─", width))
 	}
 	prefix := "──["
 	suffix := "]"
 	displayWidth := 3 + len(title) + 1 // "──[" + title + "]"
 
 	if displayWidth >= width {
-		return prefix + title + suffix + reset
+		return paint(Colors.Header, prefix+title+suffix)
 	}
-	return prefix + title + suffix + strings.Repeat("─", width-displayWidth) + reset
+	return paint(Colors.Header, prefix+title+suffix+strings.Repeat("─", width-displayWidth))
 }
 
 // Print renders a page to stdout. If pages are provided, a topics block is appended.
@@ -72,19 +63,19 @@ func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 	fmt.Println()
 
 	if p.description != "" {
-		fmt.Println("  " + p.description)
+		fmt.Println("  " + paint(Colors.Text, p.description))
 		fmt.Println()
 	}
 
 	for _, el := range p.elements {
 		switch el.kind {
 		case kindUsage:
-			fmt.Println("  " + el.pairs[0])
+			fmt.Println("  " + highlightSyntax(el.pairs[0], Colors.Text))
 			fmt.Println()
 
 		case kindText:
 			fmt.Println()
-			fmt.Println("  " + el.pairs[0])
+			fmt.Println("  " + paint(Colors.Text, el.pairs[0]))
 			fmt.Println()
 
 		case kindSection:
@@ -113,7 +104,7 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 
 	contIndent := strings.Repeat(" ", alignAt)
 	for i, e := range entries {
-		entryBlue := blues[i%2]
+		entryColor := descColor(i)
 		cmdLine := "  " + e.cmd
 		visibleCmdLen := ansiWidth(cmdLine)
 
@@ -121,18 +112,18 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 		overflowed := false
 		switch {
 		case visibleCmdLen < alignAt:
-			firstPrefix = cmdLine + strings.Repeat(" ", alignAt-visibleCmdLen)
+			firstPrefix = highlightSyntax(cmdLine, Colors.Command) + strings.Repeat(" ", alignAt-visibleCmdLen)
 		case noTruncate:
-			fmt.Println(cmdLine)
+			fmt.Println(highlightSyntax(cmdLine, Colors.Command))
 			firstPrefix = contIndent
 			overflowed = true
 		default:
 			keep := max(alignAt-alignPad-1, 0)
 			truncated, _, _ := takeVisible(cmdLine, keep)
-			firstPrefix = truncated + ellipsis + strings.Repeat(" ", alignPad)
+			firstPrefix = highlightSyntax(truncated, Colors.Command) + ellipsis + strings.Repeat(" ", alignPad)
 		}
 
-		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryBlue, alignAt, width)
+		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryColor, alignAt, width)
 
 		// an overflowed entry spans multiple lines; a blank line keeps it
 		// from running into the next entry
@@ -172,12 +163,12 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 		if !inExample {
 			if idx := strings.Index(line, "(e.g."); idx != -1 {
 				inExample = true
-				fmt.Printf("%s%s%s%s%s%s%s\n", indent, color, line[:idx], reset, dim, line[idx:], reset)
+				fmt.Printf("%s%s%s\n", indent, paint(color, line[:idx]), paint(Colors.Example, line[idx:]))
 			} else {
-				fmt.Printf("%s%s%s%s\n", indent, color, line, reset)
+				fmt.Printf("%s%s\n", indent, paint(color, line))
 			}
 		} else {
-			fmt.Printf("%s%s%s%s\n", indent, dim, line, reset)
+			fmt.Printf("%s%s\n", indent, paint(Colors.Example, line))
 		}
 	}
 }
@@ -198,17 +189,93 @@ func printTopics(binary string, pages []*Page) {
 	fmt.Println()
 
 	for _, p := range pages {
-		mainPart := "  " + p.binary
+		mainPart := paint(Colors.Command, "  "+p.binary)
 		visibleLen := ansiWidth("  " + p.binary)
 		if visibleLen < alignAt {
 			mainPart += strings.Repeat(" ", alignAt-visibleLen)
 		}
-		fmt.Println(mainPart + blue + p.description + reset)
+		fmt.Println(mainPart + paint(Colors.Desc, p.description))
 	}
 
 	fmt.Println()
 	fmt.Printf("Run '%s help <topic>' for details.\n", binary)
 	fmt.Println()
+}
+
+// highlightSyntax colors CLI notation tokens (<arg>, [opt], and -x/--flag runs)
+// in Colors.Syntax, leaving the rest of s in base. Existing ANSI escapes in s
+// pass through untouched. Returns s unchanged when Colors.Syntax is empty.
+func highlightSyntax(s, base string) string {
+	if Colors.Syntax == "" {
+		return s
+	}
+
+	var out strings.Builder
+	i, n := 0, len(s)
+	atWordStart := true
+
+	flush := func(text string) {
+		if text != "" {
+			out.WriteString(paint(base, text))
+		}
+	}
+
+	plainStart := 0
+	for i < n {
+		if s[i] == '\033' && i+1 < n && s[i+1] == '[' {
+			// pass an existing escape through untouched, as part of the plain run
+			j := i + 2
+			for j < n && s[j] != 'm' {
+				j++
+			}
+			if j < n {
+				j++
+			}
+			i = j
+			continue
+		}
+
+		switch {
+		case s[i] == '<' || s[i] == '[':
+			close := byte('>')
+			if s[i] == '[' {
+				close = ']'
+			}
+			end := strings.IndexByte(s[i:], close)
+			if end == -1 {
+				i++
+				atWordStart = false
+				continue
+			}
+			flush(s[plainStart:i])
+			end += i + 1
+			out.WriteString(paint(Colors.Syntax, s[i:end]))
+			i = end
+			plainStart = i
+			atWordStart = false
+
+		case s[i] == '-' && atWordStart:
+			end := i
+			for end < n && s[end] != ' ' {
+				end++
+			}
+			flush(s[plainStart:i])
+			out.WriteString(paint(Colors.Syntax, s[i:end]))
+			i = end
+			plainStart = i
+			atWordStart = false
+
+		case s[i] == ' ':
+			i++
+			atWordStart = true
+
+		default:
+			i++
+			atWordStart = false
+		}
+	}
+	flush(s[plainStart:])
+	return out.String()
 }
 
 // ansiWidth returns the visible (printable) width of s, ignoring ANSI escape sequences.
