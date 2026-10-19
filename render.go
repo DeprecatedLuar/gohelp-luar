@@ -89,8 +89,17 @@ func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 }
 
 func printSection(title string, entries []Entry, width int, noTruncate bool) {
-	alignAt := 0
+	var lines, items []Entry
 	for _, e := range entries {
+		if e.kind == entryItem {
+			items = append(items, e)
+		} else {
+			lines = append(lines, e)
+		}
+	}
+
+	alignAt := 0
+	for _, e := range items {
 		l := ansiWidth("  " + e.cmd)
 		if l > alignAt {
 			alignAt = l
@@ -102,8 +111,19 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 	fmt.Println(separator(title))
 	fmt.Println()
 
+	for _, e := range lines {
+		switch e.kind {
+		case entryUsage:
+			fmt.Println("  " + highlightSyntax(e.line, Colors.Text))
+			fmt.Println()
+		case entryText:
+			fmt.Println("  " + paint(Colors.Text, e.line))
+			fmt.Println()
+		}
+	}
+
 	contIndent := strings.Repeat(" ", alignAt)
-	for i, e := range entries {
+	for i, e := range items {
 		entryColor := descColor(i)
 		cmdLine := "  " + e.cmd
 		visibleCmdLen := ansiWidth(cmdLine)
@@ -127,7 +147,7 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 
 		// an overflowed entry spans multiple lines; a blank line keeps it
 		// from running into the next entry
-		if overflowed && i != len(entries)-1 {
+		if overflowed && i != len(items)-1 {
 			fmt.Println()
 		}
 	}

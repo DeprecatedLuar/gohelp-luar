@@ -132,7 +132,12 @@ func (p *parser) flushProse() {
 	if len(p.prose) == 0 {
 		return
 	}
-	p.current().Text(strings.Join(p.prose, proseJoin))
+	text := strings.Join(p.prose, proseJoin)
+	if p.open {
+		p.entries = append(p.entries, Text(text))
+	} else {
+		p.current().Text(text)
+	}
 	p.prose = nil
 }
 
@@ -198,7 +203,6 @@ func (p *parser) proseLine(rest string) error {
 	if err := p.requirePage(markerProse); err != nil {
 		return err
 	}
-	p.flushSection()
 	if rest != "" {
 		p.prose = append(p.prose, rest)
 	}
@@ -212,8 +216,11 @@ func (p *parser) usage(rest string) error {
 	if rest == "" {
 		return errors.New(msgUsageEmpty)
 	}
-	p.flushSection()
-	p.current().Usage(rest)
+	if p.open {
+		p.entries = append(p.entries, Usage(rest))
+	} else {
+		p.current().Usage(rest)
+	}
 	return nil
 }
 

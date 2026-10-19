@@ -66,8 +66,8 @@ func TestRunSpecEquivalence(t *testing.T) {
 			Item("--timeout DURATION", "Maximum time to wait for the deployment to complete before aborting (e.g. 2m, 90s)"),
 			Item("--strategy STRATEGY", "Rollout strategy to use for this deployment", "deploy up --env prod --strategy=canary-incremental-with-healthcheck"),
 			Item("--yes", "Skip confirmation prompts"),
-		).
-		Text("Credentials are read from the environment. Set DEPLOY_TOKEN or run 'deploy auth login' to authenticate.")
+			Text("Credentials are read from the environment. Set DEPLOY_TOKEN or run 'deploy auth login' to authenticate."),
+		)
 	releases := NewPage("releases", "list and inspect past deployments").
 		Text("Each deployment creates a numbered release. Releases are immutable and retained for 30 days.").
 		Section("Commands",

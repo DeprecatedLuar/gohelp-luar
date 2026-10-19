@@ -77,9 +77,25 @@ func TestParseStructure(t *testing.T) {
 
 func TestParseOrder(t *testing.T) {
 	s := mustParse(t, "# x\n$ x run\n> a\n## S\n- c | d\n> b\n")
-	want := []elementKind{kindUsage, kindText, kindSection, kindText}
+	want := []elementKind{kindUsage, kindText, kindSection}
 	if got := kinds(s.Root); !reflect.DeepEqual(got, want) {
 		t.Fatalf("kinds = %v, want %v", got, want)
+	}
+}
+
+func TestParseSectionScope(t *testing.T) {
+	s := mustParse(t, "# x\n$ x run\n## S\n$ x s <a>\n> one\n> two\n- c | d\n> after\n## T\n- e | f\n")
+	want := []elementKind{kindUsage, kindSection, kindSection}
+	if got := kinds(s.Root); !reflect.DeepEqual(got, want) {
+		t.Fatalf("kinds = %v, want %v", got, want)
+	}
+	wantS := []Entry{Usage("x s <a>"), Text("one two"), Item("c", "d"), Text("after")}
+	if got := s.Root.elements[1].entries; !reflect.DeepEqual(got, wantS) {
+		t.Errorf("S entries = %+v, want %+v", got, wantS)
+	}
+	wantT := []Entry{Item("e", "f")}
+	if got := s.Root.elements[2].entries; !reflect.DeepEqual(got, wantT) {
+		t.Errorf("T entries = %+v, want %+v", got, wantT)
 	}
 }
 
@@ -113,7 +129,6 @@ func TestParseErrors(t *testing.T) {
 		{"section before", "## S\n# x\n", "line 1:"},
 		{"empty name", "# | desc\n", "line 1:"},
 		{"item no section", "# x\n- a | b\n", "line 2:"},
-		{"item after prose", "# x\n## S\n> p\n- a | b\n", "line 4:"},
 		{"one-field item", "# x\n## S\n- a\n", "line 3:"},
 		{"empty cmd", "# x\n## S\n- | b\n", "line 3:"},
 		{"empty desc", "# x\n## S\n- a |\n", "line 3:"},

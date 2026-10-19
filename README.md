@@ -100,7 +100,20 @@ $ mytool <command> [flags]
 ```
 
 Indentation carries no meaning, blank lines only end a `>` paragraph, and a section may hold zero items. A `-` item must
-sit under a `##` section, and a `>` or `$` line closes the open section. Topic names must be unique.
+sit under a `##` section. Topic names must be unique.
+
+`$` and `>` lines before a page's first `##` belong to the page. After a `##` they belong to that section until
+the next `##` or `#`, and render under its bar, in line order, before its items:
+
+```markdown
+# luxos
+$ luxos <command> [args]
+## module
+$ luxos module <verb> <name>
+> Manage modules.
+- list | List modules
+- add | Create a module
+```
 
 `@` lines may appear anywhere. Keys: `header`, `command`, `desc`, `descalt`, `text`, `example`,
 `syntax`. Values: a palette name (`dim`, `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
@@ -125,10 +138,21 @@ gohelp.NewPage(binary, description string) *Page
 | `.Section(title string, entries ...Entry)` | Adds a labeled section with a `──[Title]──` bar |
 | `.Text(s string)` | Adds a plain paragraph |
 
-### Items
+### Section entries
 
 ```go
 gohelp.Item(cmd, desc string, example ...string) Entry  // optional third arg is a dim example line
+gohelp.Usage(s string) Entry                            // section usage line, shown under the bar before items
+gohelp.Text(s string) Entry                             // section paragraph, shown under the bar before items
+```
+
+```go
+gohelp.NewPage("luxos", "").
+    Section("module",
+        gohelp.Usage("luxos module <verb> <name>"),
+        gohelp.Text("Manage modules."),
+        gohelp.Item("list", "List modules"),
+    )
 ```
 
 ### Rendering
