@@ -88,11 +88,11 @@ Each line starts with a marker, followed by a space:
 @ header=cyan desc=#5fafff
 $ mytool <command> [flags]
 
+> All commands support --help for detailed usage.
+
 ## Commands
 - start | Start the service | mytool start --env prod
 - stop | Gracefully stop the service
-
-> All commands support --help for detailed usage.
 
 # config | manage configuration
 ## Commands
@@ -160,6 +160,7 @@ gohelp.NewPage("luxos", "").
 ```go
 gohelp.Run(args []string, root *Page, pages ...*Page) error  // route and print (pass os.Args[1:])
 gohelp.Print(p *Page, pages ...*Page)                         // print a specific page directly
+(*Page).FprintSection(w io.Writer, title string) error        // print one section to w; error if no section has that title
 ```
 
 ### Help files
@@ -205,7 +206,9 @@ meant to be called with a literal at startup).
 ## Output
 
 ```
-──[deploy - zero-downtime deployment tool]──────────────────────────────────
+──[deploy]──────────────────────────────────────────────────────────────────
+
+  zero-downtime deployment tool
 
   deploy <command> [flags]
 
@@ -220,21 +223,23 @@ meant to be called with a literal at startup).
 
 ──[Flags]───────────────────────────────────────────────────────────────────
 
-  --env ENV           Target environment: dev, staging, or prod (required)
-  --dry-run           Print the actions that would be taken without executing
-                      them
-  --timeout DURATION  Maximum time to wait for the deployment to complete
-                      before aborting (e.g. 2m, 90s)
-  --yes               Skip confirmation prompts
+  --env ENV            Target environment: dev, staging, or prod (required)
+  --dry-run            Print the actions that would be taken without executing
+                       them
+  --timeout DURATION   Maximum time to wait for the deployment to complete
+                       before aborting (e.g. 2m, 90s)
+  --strategy STRATEGY  Rollout strategy to use for this deployment  (e.g. deploy
+                       up --env prod
+                       --strategy=canary-incremental-with-healthcheck)
+  --yes                Skip confirmation prompts
 
 
-  Credentials are read from the environment. Set DEPLOY_TOKEN or run
-  'deploy auth login' to authenticate.
-
+  Credentials are read from the environment. Set DEPLOY_TOKEN or run 'deploy auth login' to authenticate.
 
 ────────────────────────────────────────────────────────────────────────────
 
 Topics:
+
   releases  list and inspect past deployments
   auth      manage authentication credentials
 

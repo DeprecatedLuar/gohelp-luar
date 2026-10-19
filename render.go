@@ -2,6 +2,7 @@ package gohelp
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -16,6 +17,8 @@ const (
 	minWrapWidth     = 20 // minimum description wrap width regardless of terminal size
 	minDescWidth     = 23 // minimum columns guaranteed to the description before the command column gives way
 	ellipsis         = "…"
+
+	fmtNoSection = "gohelp: page %q has no section %q"
 )
 
 func termWidth() int {
@@ -55,6 +58,17 @@ func Print(p *Page, pages ...*Page) {
 	printPage(p, p.binary, false, pages...)
 }
 
+// FprintSection writes the section titled title to w, as it renders in the full page.
+func (p *Page) FprintSection(w io.Writer, title string) error {
+	for _, el := range p.elements {
+		if el.kind == kindSection && el.title == title {
+			printSection(w, el.title, el.entries, termWidth(), false)
+			return nil
+		}
+	}
+	return fmt.Errorf(fmtNoSection, p.binary, title)
+}
+
 func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 	width := termWidth()
 
@@ -79,7 +93,7 @@ func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 			fmt.Println()
 
 		case kindSection:
-			printSection(el.title, el.entries, width, noTruncate)
+			printSection(os.Stdout, el.title, el.entries, width, noTruncate)
 		}
 	}
 
@@ -88,7 +102,7 @@ func printPage(p *Page, rootBinary string, noTruncate bool, pages ...*Page) {
 	}
 }
 
-func printSection(title string, entries []Entry, width int, noTruncate bool) {
+func printSection(w io.Writer, title string, entries []Entry, width int, noTruncate bool) {
 	var lines, items []Entry
 	for _, e := range entries {
 		if e.kind == entryItem {
@@ -108,17 +122,17 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 	alignAt += alignPad
 	alignAt = min(alignAt, maxAlignAt(width))
 
-	fmt.Println(separator(title))
-	fmt.Println()
+	fmt.Fprintln(w, separator(title))
+	fmt.Fprintln(w)
 
 	for _, e := range lines {
 		switch e.kind {
 		case entryUsage:
-			fmt.Println("  " + highlightSyntax(e.line, Colors.Text))
-			fmt.Println()
+			fmt.Fprintln(w, "  "+highlightSyntax(e.line, Colors.Text))
+			fmt.Fprintln(w)
 		case entryText:
-			fmt.Println("  " + paint(Colors.Text, e.line))
-			fmt.Println()
+			fmt.Fprintln(w, "  "+paint(Colors.Text, e.line))
+			fmt.Fprintln(w)
 		}
 	}
 
@@ -134,7 +148,7 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 		case visibleCmdLen < alignAt:
 			firstPrefix = highlightSyntax(cmdLine, Colors.Command) + strings.Repeat(" ", alignAt-visibleCmdLen)
 		case noTruncate:
-			fmt.Println(highlightSyntax(cmdLine, Colors.Command))
+			fmt.Fprintln(w, highlightSyntax(cmdLine, Colors.Command))
 			firstPrefix = contIndent
 			overflowed = true
 		default:
@@ -143,20 +157,20 @@ func printSection(title string, entries []Entry, width int, noTruncate bool) {
 			firstPrefix = highlightSyntax(truncated, Colors.Command) + ellipsis + strings.Repeat(" ", alignPad)
 		}
 
-		printWrappedDesc(firstPrefix, e.desc, e.example, contIndent, entryColor, alignAt, width)
+		printWrappedDesc(w, firstPrefix, e.desc, e.example, contIndent, entryColor, alignAt, width)
 
 		// an overflowed entry spans multiple lines; a blank line keeps it
 		// from running into the next entry
 		if overflowed && i != len(items)-1 {
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 }
 
 const egPrefix = "  (e.g. "
 
-func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, width int) {
+func printWrappedDesc(w io.Writer, prefix, desc, example, contIndent, color string, alignAt, width int) {
 	wrapWidth := max(width-alignAt, minWrapWidth)
 
 	full := desc
@@ -164,7 +178,7 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 		full += egPrefix + example + ")"
 	}
 	if full == "" {
-		fmt.Println(prefix)
+		fmt.Fprintln(w, prefix)
 		return
 	}
 
@@ -183,12 +197,12 @@ func printWrappedDesc(prefix, desc, example, contIndent, color string, alignAt, 
 		if !inExample {
 			if idx := strings.Index(line, "(e.g."); idx != -1 {
 				inExample = true
-				fmt.Printf("%s%s%s\n", indent, paint(color, line[:idx]), paint(Colors.Example, line[idx:]))
+				fmt.Fprintf(w, "%s%s%s\n", indent, paint(color, line[:idx]), paint(Colors.Example, line[idx:]))
 			} else {
-				fmt.Printf("%s%s\n", indent, paint(color, line))
+				fmt.Fprintf(w, "%s%s\n", indent, paint(color, line))
 			}
 		} else {
-			fmt.Printf("%s%s\n", indent, paint(Colors.Example, line))
+			fmt.Fprintf(w, "%s%s\n", indent, paint(Colors.Example, line))
 		}
 	}
 }
