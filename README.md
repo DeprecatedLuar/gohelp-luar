@@ -12,6 +12,8 @@ go get github.com/DeprecatedLuar/gohelp-luar
 
 ## Usage
 
+Pages can also be built in Go:
+
 ```go
 import (
     "fmt"
@@ -44,6 +46,69 @@ if err := gohelp.Run(os.Args[1:], root, config); err != nil {
 }
 ```
 
+## Help files
+
+The preferred way to define help is a markdown-flavoured file, rendered with one call:
+
+```go
+import (
+    _ "embed"
+    "fmt"
+    "os"
+    gohelp "github.com/DeprecatedLuar/gohelp-luar"
+)
+
+//go:embed help.md
+var helpSpec string
+
+func main() {
+    if err := gohelp.RunSpec(os.Args[1:], helpSpec); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+}
+```
+
+A Go string constant works the same way. `//go:embed` only reaches files in the package's own
+directory or below. Name the file `help.md`, or `<name>.help.md` when a tool has more than one.
+
+Each line starts with a marker, followed by a space:
+
+| Marker | Meaning |
+|--------|---------|
+| `#`  | page header, `name \| description`. The first is the root page; each later one is a topic |
+| `##` | section title |
+| `-`  | item, `command \| description \| example` (example is optional) |
+| `>`  | prose line; consecutive `>` lines join into one paragraph, a blank line ends it |
+| `$`  | usage line |
+| `@`  | theme assignments, `key=value ...` |
+
+```markdown
+# mytool | does something useful
+@ header=cyan desc=#5fafff
+$ mytool <command> [flags]
+
+## Commands
+- start | Start the service | mytool start --env prod
+- stop | Gracefully stop the service
+
+> All commands support --help for detailed usage.
+
+# config | manage configuration
+## Commands
+- show | Print current config
+```
+
+Indentation carries no meaning, blank lines only end a `>` paragraph, and a section may hold zero items. An `-` item must
+sit under a `##` section, and a `>` or `$` line closes the open section. Topic names must be unique.
+
+`@` lines may appear anywhere. Keys: `header`, `command`, `desc`, `descalt`, `text`, `example`,
+`syntax`. Values: a palette name (`dim`, `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
+`cyan`, `white`, case-insensitive) or a hex color (`#rrggbb` or `rrggbb`). Omitting a key keeps
+the default; `key=` with no value means no color. Each key may be assigned once.
+
+Mistakes surface as `gohelp: line N: ...` the first time the tool's help runs, and nothing is printed.
+
 ## API
 
 ### Pages
@@ -72,6 +137,16 @@ gohelp.Item(cmd, desc string, example ...string) Entry  // optional third arg is
 gohelp.Run(args []string, root *Page, pages ...*Page) error  // route and print (pass os.Args[1:])
 gohelp.Print(p *Page, pages ...*Page)                         // print a specific page directly
 ```
+
+### Help files
+
+```go
+gohelp.Parse(spec string) (*Spec, error)                      // help-file text -> Spec{Root, Pages, Theme}
+gohelp.RunSpec(args []string, spec string) error              // Parse, apply the theme to Colors, then Run
+```
+
+`Parse` is all-or-nothing: on error it returns `nil` and no pages. `RunSpec` sets `Colors` only after
+a successful parse; fields without an `@` assignment keep their current value.
 
 `Run` routing:
 - no args / `help` → root page, `nil`
@@ -141,4 +216,4 @@ Topics:
 Run 'deploy help <topic>' for details.
 ```
 
-See `_examples/main.go` for a complete working example.
+See `_examples/main.go` (builder) and `_examples/spec` (help file) for complete working examples.
