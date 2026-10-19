@@ -275,3 +275,13 @@ func themeColor(value string) (string, error) {
 	}
 	return parseHex(value)
 }
+
+// RunSpec parses a help file and routes args through Run.
+func RunSpec(args []string, spec string) error {
+	s, err := Parse(spec)
+	if err != nil {
+		return err
+	}
+	Colors = s.Theme
+	return Run(args, s.Root, s.Pages...)
+}
